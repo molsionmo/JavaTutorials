@@ -4,6 +4,8 @@
 
 # java Concurrency
 
+Thread使用了模板模式,父类定义了算法结构,子类实现逻辑细节.Thread.run()给子类定义逻辑，Thread.start()会直接调用run中的逻辑
+
 [oracle-java-concurrency](https://docs.oracle.com/javase/tutorial/essential/concurrency/index.html)
 
 ## 高级并发对象
