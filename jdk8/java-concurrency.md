@@ -1,5 +1,3 @@
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=6 orderedList=false} -->
-
 [TOC]
 
 # java Concurrency
@@ -75,3 +73,7 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 ```java
 
 ```
+
+## 守护线程
+
+守护线程一般处理后台的一些任务，当JVM只存在守护线程时，JVM退出.垃圾回收就是典型的守护线程，在其他用户线程结束后将会自动结束生命周期

@@ -108,5 +108,10 @@ cond2(no)->io1
 ```
 
 ## 数学公式
+
 $$ f(x) = sin(x) +13 $$
 $$ \sum_{n=1}^{100} $$
+
+## 参考
+
+[Markdown 入门参考](http://xianbai.me/learn-md/article/syntax/links.html)
