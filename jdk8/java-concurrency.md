@@ -74,6 +74,141 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 
 ```
 
+### Fork/Join
+
+Fork/Join提供了并行计算的基础框架,不过计算任务如何拆解还是User自己关注的事情; oracle上的简易例子
+
+```java
+public class MyRecursiveTask extends RecursiveTask<Long> {
+
+    private long workLoad = 0;
+
+    public MyRecursiveTask(long workLoad) {
+        this.workLoad = workLoad;
+    }
+
+    //核心方法,根据任务的重量进行切割直至可以单个完成;上级任务join等待,然后底层子任务递归返回
+    @Override
+    protected Long compute() {
+        //if work is above threshold, break tasks up into smaller tasks
+        if(this.workLoad > 16) {
+            System.out.println("Splitting workLoad : " + this.workLoad);
+
+            List<MyRecursiveTask> subtasks = new ArrayList<>();
+            subtasks.addAll(createSubtasks());
+
+            for(MyRecursiveTask subtask : subtasks){
+                subtask.fork();
+            }
+
+            long result = 0;
+            for(MyRecursiveTask subtask : subtasks) {
+                result += subtask.join();
+            }
+            return result;
+
+        } else {
+            System.out.println("Doing workLoad myself: " + this.workLoad);
+            return workLoad * 2;
+        }
+    }
+
+    private List<MyRecursiveTask> createSubtasks() {
+        List<MyRecursiveTask> subtasks = new ArrayList<>();
+
+        MyRecursiveTask subtask1 = new MyRecursiveTask(this.workLoad / 2);
+        MyRecursiveTask subtask2 = new MyRecursiveTask(this.workLoad / 2);
+
+        subtasks.add(subtask1);
+        subtasks.add(subtask2);
+
+        return subtasks;
+    }
+
+    public static void main(String[] args) {
+        MyRecursiveTask myRecursiveTask = new MyRecursiveTask(1024);
+
+        long mergedResult = new ForkJoinPool().invoke(myRecursiveTask);
+
+        System.out.println("mergedResult = " + mergedResult);
+    }
+}
+```
+
 ## 守护线程
 
-守护线程一般处理后台的一些任务，当JVM只存在守护线程时，JVM退出.垃圾回收就是典型的守护线程，在其他用户线程结束后将会自动结束生命周期
+守护线程一般处理后台的一些任务，当JVM只存在守护线程时，JVM退出.垃圾回收就是典型的守护线程，在其他用户线程结束后将会自动结束生命周期。
+
+### 什么时候使用守护线程
+
+* 守护线程一般用于执行一些后台任务,他在某些线程关闭或者退出JVM时，此线程就能自动关闭
+* 简单的一个游戏程序,其中一个线程在后台不断与服务器交互以获得玩家最新金币,武器信息,并且希望在游戏客户端关闭时，这些数据同步工作也能自动关闭,此时就能使用守护进程
+
+## Thread方法详解
+
+### 线程阻塞方法
+
+下面的方法都会阻塞当前线层,也都可以被Thread.interrupt给中断
+
+* Object.wait(),wait(long),wait(long,int)
+* Thread.sleep(long),sleep(long,int);
+* Thread.join,join(long),join(long,int);阻塞主线程,等待分支线程执行结束
+
+### 线程关闭的2种设计
+
+1. 调用Thread.interruput,直接中断线程,由线程处理中断(内置支持,不过要能处理中断),while(!isInterruput()){dosomthing}
+2. 使用volatile开关控制,当前ThreadTask持有一个中断的标志,实现closeable接口中的close方法,while(!isInterruput() && !isClose()){dosomething}
+3. 线程正常执行结束,正常关闭
+
+### 线程上下文类加载器
+
+* getContextClassLoader()获取上下文的类加载器,如果在没有修改线程上下文类加载器的情况下,则保持与父线程同样的类加载器
+* setContextClassLoader可以设置线程的类加载器
+
+## Syschronized
+
+### JVM指令
+
+使用javap进行反编译,会发现 monitorenter指令 与 monitorexit指令
+
+```java
+public class Mutex {
+    private static final Object MUTEX = new Object();
+
+    public void accessSource(){
+        synchronized (MUTEX){
+            try {
+                TimeUnit.MINUTES.sleep(5);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        final Mutex mutex = new Mutex();
+
+        for (int i=0;i<2;i++){
+            new Thread(mutex::accessSource).start();
+        }
+    }
+}
+```
+
+![2个线程jstack情况](https://i.loli.net/2019/08/25/bIW2udqJH5tinR7.png)
+
+### 是否可被中断
+
+* synchronized (MUTEX)是不可以被Thread.interrupt中断的.
+* synchronized (MUTEX)是不会有超时概念的,会一直阻塞等待
+
+## 线程间通信
+
+### 单线程通信
+
+* Object.wait()与Object.notify()需要在synchronized中实现,需要在获得monitor所有权后才能执行,如果没获得monitor将会抛出IllegalMonitorStateException
+* wait与notify可以实现线程间的生产者消费者模型,使用的对象是queue,一边生产一边消费.
+
+### 多线程通信
+
+生产者消费者模型中常规的例子是单线程通信,一个take,一个offer。多线程时需要对eventQueue进行synchronized,然后使用queue.notifyAll方法唤醒所有的线程进行争抢锁.不过synchronized锁定的是常规的核心操作流程,实际上已经被变成了单线程通信

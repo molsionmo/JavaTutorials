@@ -10,7 +10,7 @@ Actors属于并发组件模型 ，通过组件方式定义并发编程范式的�
 * 没有任何地方同步
 * "Share nothing"
 * 隔离计算实体
-* 不可变的消息 消息模型类似mailbox / queue
+* 不可变的消息 消息模型类似mailbox/queue
 
 ## Actor操作
 
