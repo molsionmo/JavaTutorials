@@ -211,4 +211,6 @@ public class Mutex {
 
 ### 多线程通信
 
-生产者消费者模型中常规的例子是单线程通信,一个take,一个offer。多线程时需要对eventQueue进行synchronized,然后使用queue.notifyAll方法唤醒所有的线程进行争抢锁.不过synchronized锁定的是常规的核心操作流程,实际上已经被变成了单线程通信
+* 生产者消费者模型中常规的例子是单线程通信,一个take,一个offer。
+* 多线程时需要对eventQueue进行synchronized,然后使用queue.notifyAll方法唤醒所有的线程进行争抢锁.不过synchronized锁定的是常规的核心操作流程,实际上已经被变成了单线程通信。
+* 需要多线程中有可以进行并发的部分才能发挥其多线程优势
