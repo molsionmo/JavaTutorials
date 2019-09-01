@@ -10,12 +10,75 @@ Thread使用了模板模式,父类定义了算法结构,子类实现逻辑细节
 
 ### Lock
 
+synchronized有2个问题
+
+* 不能中断
+* 不能设置超时
+* 常规使用ReentrantLock.tryLock(long,TimeUnit)有超时时间也可以中断
+
 锁可以在申请尝试时退出，tryLock(time,timeUtil)可以在时间申请后退出，lockInterruptibly将会退出如果另外线程发送中断信号
 
 ```java
-private final Lock lock = new ReentrantLock();
-lock.tryLock();
-lock.unlock();
+// 类似synchronized,无法被interruput
+void lock();
+
+//可以被中断的获取锁,获取锁时阻塞线程
+void lockInterruptibly() throws InterruptedException;
+
+//不会阻塞的获取锁,立即返回
+boolean tryLock();
+
+//设定等待时间的获取锁;可以被中断
+boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
+
+void unlock();
+```
+
+```java
+public class TryReentrantLock {
+    public static void main(String[] args) throws InterruptedException {
+        Lock lock = new ReentrantLock();
+
+        Thread thread1 = new Thread(new TestThread(lock), "thread1");
+        Thread thread2 = new Thread(new TestThread(lock), "thread2");
+
+        thread1.start();
+        thread2.start();
+
+        TimeUnit.SECONDS.sleep(1);
+
+        thread2.interrupt();
+
+    }
+
+    static class TestThread implements Runnable {
+        public TestThread(Lock lock) {
+            this.lock = lock;
+        }
+
+        public Lock lock;
+
+        @Override
+        public void run() {
+            try {
+                lock.lockInterruptibly();
+
+                System.out.println(Thread.currentThread().getName() + ": get the lock");
+                try {
+                    TimeUnit.SECONDS.sleep(3);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    lock.unlock();
+                }
+
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                System.out.println(Thread.currentThread().getName() + " interrupt");
+            }
+        }
+    }
+}
 ```
 
 ### Exectors
@@ -214,3 +277,13 @@ public class Mutex {
 * 生产者消费者模型中常规的例子是单线程通信,一个take,一个offer。
 * 多线程时需要对eventQueue进行synchronized,然后使用queue.notifyAll方法唤醒所有的线程进行争抢锁.不过synchronized锁定的是常规的核心操作流程,实际上已经被变成了单线程通信。
 * 需要多线程中有可以进行并发的部分才能发挥其多线程优势
+
+## ThreadGroup
+
+创建线程的时候如果没有显示的指定ThreadGroup,那么新的线程会被加入与父线程相同的ThreadGroup中.
+
+守护ThreadGroup: 若将ThreadGroup设置为daemon，也并不会影响线程的daemon属性,在group中没有任何active线程的时候该group将自动destory(在父group中将自己移除)
+
+## Hook线程及捕获执行异常
+
+Runtime.getRuntime.addShutdownHook()可以用于在进程结束时增加钩子线程处理额外事情;如线程启动lock文件,hook线程删掉文件以保证线程只有一个启动
