@@ -137,6 +137,15 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 
 ```
 
+##### ThreadPoolExecutor
+
+* corePoolSize: the number of threads to keep in the pool;常规线程池持有的线程大小,真正执行的线程,传入进来的Thread只是执行了他们的run方法
+* maximumPoolSize: the maximum number of threads to allow in the pool;线程池最大可以承接的线程数量
+* keepAliveTime+TimeUnit: 定义在排队的thread的超时时间
+* workQueue: the queue to use for holding tasks before they are executed;用于存储需要执行的线程队列
+* ThreadFactory: the factory to use when the executor creates a new thread;线程工厂,可以指定线程的名称与Group相关信息,定义工厂的创造逻辑
+* RejectedExecutionHandler: the handler to use when execution is blocked because the thread bounds and queue capacities are reached;当工作队列已经满时对于新的线程提交无法处理时的处理实现接口,可以异步进行通知与处理;
+
 ### Fork/Join
 
 Fork/Join提供了并行计算的基础框架,不过计算任务如何拆解还是User自己关注的事情; oracle上的简易例子
