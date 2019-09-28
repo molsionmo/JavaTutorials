@@ -139,8 +139,9 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 
 ##### ThreadPoolExecutor
 
+* **最大可接收的线程数: maximumPoolSize + workQueue.size()**
 * corePoolSize: the number of threads to keep in the pool;常规线程池持有的线程大小,真正执行的线程,传入进来的Thread只是执行了他们的run方法
-* maximumPoolSize: the maximum number of threads to allow in the pool;线程池最大可以承接的线程数量
+* maximumPoolSize: the maximum number of threads to allow in the pool;线程池最大可以承接的线程数量;当workQueue已经满时,新建线程执行Thread
 * keepAliveTime+TimeUnit: 定义在排队的thread的超时时间
 * workQueue: the queue to use for holding tasks before they are executed;用于存储需要执行的线程队列
 * ThreadFactory: the factory to use when the executor creates a new thread;线程工厂,可以指定线程的名称与Group相关信息,定义工厂的创造逻辑
