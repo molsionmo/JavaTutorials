@@ -95,7 +95,45 @@ class文件格式是JVM规范向外提供的统一结构, 而JVM只是需要clas
 #### 破坏双亲委派模式
 
 1. 第一次破坏是对JDK1.2之前的兼容, 1.2提出双亲委派机制, ClassLoader中增加一个protected的findClass()方法,不建议直接重写loadClass()方法,loadClass方法当前的逻辑就是尝试父类加载,失败再调用子类中的findClass方法
-2. 第二次是JDBC,JNDI标准出现时,JDBC的代码由启动类加载器去加载(处于rt.jar中),JDBC需要去加载外部产商实现的类(impl Driver),这时启动类加载器是没办法加载到的, 所以引进了线程上下文类加载器(Thread Context ClassLoader).
+2. 第二次是JDBC,JNDI标准出现时,JDBC的代码由启动类加载器去加载(处于rt.jar中),JDBC需要去加载外部产商实现的类(impl Driver),这时启动类加载器是没办法加载到的, 所以引进了线程上下文类加载器(Thread Context ClassLoader).JDBC使用SPI完成实现类的加载.
    1. **如果线程创建时没有设置的话,它将会从父线程中继承一个**
    2. 如果应用程序全局范围没有设置过的话,那这个类加载器默认就是AppClassLoader
+   3. **ServiceLoader.load(Class service)方法中使用的就是Thread.currentThread().getContextClassLoader()**, 线程上下文类加载器由于是用户自己定义的,是可以破坏双亲委派,直接优先加载自己URL中的类.
+   4. Tomcat中有个CommonClassLoader,加载所有webApp公共的类(Spring),自己的webApp有一个自己的WebAppClassLoader(应用实现类),故Spring进行加载应用实现类时也是使用了线程上下文加载类
 3. 第三次破坏是由于用户对程序动态性的追求而导致的,代码热替换,模块热部署
+
+#### JDBC-SPI机制破坏双亲委派机制过程
+
+1. BootstrapClassLoader 加载DriverManager类
+2. DriverManager 类中有static块(初始化), loadInitialDrivers(),里面的代码其实就是调用ServiceLoader.load(Driver.class),而SPI机制调用的是当前线程的上下文类加载器,其实就是AppClassLoader,**也就是说DriverManager类初始化需要AppClassLoader的协助,这个已经是依赖倒挂了,破坏了双亲委派机制**
+3. DriverManager.loadInitialDrivers代码中调用了SPI.load后,还将返回的driversIterator进行了hasNext遍历, hasNext中实现了Class.forName()加载,自此Driver实现类com.mysql.jdbc.Driver就加载到AppClassLoader中了
+4. com.mysql.jdbc.Driver初始化也有段static块,DriverManager.registerDriver(new com.lcy.mysql.Driver()),将一个mysqlDriver实体注册到DriverManager上
+
+```java
+public static void main(String[] args){
+    Enumeration<Driver> drivers = DriverManager.getDrivers();
+    Driver driver;
+    while (drivers.hasMoreElements())
+    {
+        driver = drivers.nextElement();
+        System.out.println(driver.getClass() + "------" + driver.getClass().getClassLoader());
+    }
+    System.out.println(DriverManager.class+ "------" + DriverManager.class.getClassLoader());
+}
+
+/**输出结果:
+
+class com.mysql.jdbc.Driver------sun.misc.Launcher$AppClassLoader@14dad5dc
+class com.mysql.fabric.jdbc.FabricMySQLDriver------sun.misc.Launcher$AppClassLoader@14dad5dc
+class java.sql.DriverManager------null
+
+**/
+```
+
+#### URLClassLoader
+
+* **一般来说,即使破坏双亲委派,基础类还是由BootstrapClassLoader,应用classPath的类由AppClassLoader,其他的再由线程自己决定,防止出现ClassCastExecption**
+* 这个类可以在JVM运行时额外在线程中加载另外的jar包,既不属于JDK的核心包,也不属于这个应用的ClassPath包.它重写了findClass方法,loadClass方法使用的还是ClassLoader类里面的实现(双亲委派)
+* 不同线程可以设置不同的类加载器,但是Luncher$AppClassLoader,BootstrapClassLoader在同一个JVM中还是有且只有一个, 故加载Object-class时是同一个, AppClassLoader中加载的ApplicationContext也是一个
+* 额外URL中增加的类如TransactionException,不同线程间就不一样了,因为URLClassLoader是不一样的,命名空间不一样那么累也就不一样了
+* 我们可以继承实现自己的MyURLClassLoader, 实现childFirst的加载, 即如果Luncher$AppClassLoader,BootstrapClassLoader有同样的类, 我也使用MyURLCLassLoader优先加载,重载loadClass即可(Flink就是这样实现的),如果只是重载findClass,那么还是至少会先从BootstrapClassLoader开始

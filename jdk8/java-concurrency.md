@@ -81,6 +81,213 @@ public class TryReentrantLock {
 }
 ```
 
+#### AbstractQueuedSynchronizer
+
+AQS,队列同步器,解决独占与共享同步问题,ReentrantLock,ReentrantReadWriteLock,CountDownLatch,CyclicBarrier 都是基于它实现了同步功能.
+
+```java
+/****
+* 独占模式下实现tryAcquire与tryRelease后就可以使用它的大部分行为方法了
+* share模式下实现tryAcquireShared与tryReleaseShared后就可以使用它的大部分行为方法了
+*/
+public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer implements java.io.Serializable{
+    //由子类实现;尝试一次信号获取,不成功直接返回
+    protected boolean tryAcquire(int arg);
+    //share模式下的同样方法
+    protected int tryAcquireShared(int arg);
+
+    //有时间限定的尝试获取信号;都基于 tryAcquire;tryAcquireShared的实现进行有限时间的重试
+    public final boolean tryAcquireNanos(int arg, long nanosTimeout);
+    public final boolean tryAcquireSharedNanos(int arg, long nanosTimeout);
+
+    //由子类实现;释放信号,与上述tryAcquire可以实现可重入锁
+    protected boolean tryRelease(int arg)
+    protected boolean tryReleaseShared(int arg);
+    //基于上述tryRelease进行确认性的释放信号
+    public final boolean release(int arg)
+    public final boolean releaseShared(int arg);
+
+    //独占模式下的阻塞式获取信号,无法阻断,类似于synchronized
+    public final void acquire(int arg);
+    //独占模式下的阻塞式获取信号,可以阻断
+    public final void acquireInterruptibly(int arg);
+    //share模式下的阻塞式信号获取;CountDownLatch就使用了acquireShared(1)来实现await()方法
+    public final void acquireShared(int arg);
+    public final void acquireSharedInterruptibly(int arg)
+}
+```
+
+##### ReentrantLock-Sync
+
+* FairSync(谁等得久谁就拿走锁,FIFO)
+* NonfairSync(随便谁都可以拿,没界定)
+* 可重入的实现其实是state增加,每次lock+1,需要多次unlock
+* Sync核心是实现tryAcquire(int),tryRelease(int)
+* Sync暴露的API是lock(int),parent.acquireInterruptibly(int),parent.release(int),parent.tryAcquireNanos(timeout,unit),还有AQS中的队列情况与当前线程等.
+* compareAndSetState方法来自AQS,它使用的是Unsafe.compareAndSwapInt()硬件级的原子操作,只有部分类才能使用
+
+```java
+public class ReentrantLock{
+    public void lock() {
+        //底层是 Sync.acquire(1);
+        sync.lock();
+    }
+    public boolean tryLock() {
+        return sync.nonfairTryAcquire(1);
+    }
+    public boolean tryLock(long timeout, TimeUnit unit)throws InterruptedException {
+        return sync.tryAcquireNanos(1, unit.toNanos(timeout));
+    }
+    public void unlock() {sync.release(1);}
+    public final boolean isFair() {return sync instanceof FairSync;}
+}
+
+abstract static class Sync extends AbstractQueuedSynchronizer {
+    final boolean nonfairTryAcquire(int acquires) {
+        final Thread current = Thread.currentThread();
+        int c = getState();
+        if (c == 0) {
+            if (compareAndSetState(0, acquires)) {
+                setExclusiveOwnerThread(current);
+                return true;
+            }
+        }
+        else if (current == getExclusiveOwnerThread()) {
+            int nextc = c + acquires;
+            if (nextc < 0) // overflow
+                throw new Error("Maximum lock count exceeded");
+            setState(nextc);
+            return true;
+        }
+        return false;
+    }
+
+    protected final boolean tryRelease(int releases) {
+        int c = getState() - releases;
+        if (Thread.currentThread() != getExclusiveOwnerThread())
+            throw new IllegalMonitorStateException();
+        boolean free = false;
+        if (c == 0) {
+            free = true;
+            setExclusiveOwnerThread(null);
+        }
+        setState(c);
+        return free;
+    }
+
+    protected final boolean isHeldExclusively() {
+        return getExclusiveOwnerThread() == Thread.currentThread();
+    }
+
+    final ConditionObject newCondition() {
+        return new ConditionObject();
+    }
+
+    // Methods relayed from outer class
+
+    final Thread getOwner() {
+        return getState() == 0 ? null : getExclusiveOwnerThread();
+    }
+
+    final int getHoldCount() {
+        return isHeldExclusively() ? getState() : 0;
+    }
+
+    final boolean isLocked() {
+        return getState() != 0;
+    }
+
+    /**
+        * Reconstitutes the instance from a stream (that is, deserializes it).
+        */
+    private void readObject(java.io.ObjectInputStream s)
+        throws java.io.IOException, ClassNotFoundException {
+        s.defaultReadObject();
+        setState(0); // reset to unlocked state
+    }
+}
+static final class FairSync extends Sync {
+    final void lock() {
+        acquire(1);
+    }
+    protected final boolean tryAcquire(int acquires) {
+        final Thread current = Thread.currentThread();
+        int c = getState();
+        if (c == 0) {
+            if (!hasQueuedPredecessors() &&
+                compareAndSetState(0, acquires)) {
+                setExclusiveOwnerThread(current);
+                return true;
+            }
+        }
+        else if (current == getExclusiveOwnerThread()) {
+            int nextc = c + acquires;
+            if (nextc < 0)
+                throw new Error("Maximum lock count exceeded");
+            setState(nextc);
+            return true;
+        }
+        return false;
+    }
+}
+static final class NonfairSync extends Sync {
+    final void lock() {
+        if (compareAndSetState(0, 1))
+            setExclusiveOwnerThread(Thread.currentThread());
+        else
+            acquire(1);
+    }
+
+    protected final boolean tryAcquire(int acquires) {
+        return nonfairTryAcquire(acquires);
+    }
+}
+```
+
+##### CountDownLatch-Sync
+
+```java
+/**
+* 初始化CountDownLatch count=10;
+* 10个工作线程countDown(),将 state置为0, 主线程的await(),acquireSharedInterruptibly(1)才能解除阻塞
+*/
+public class CountDownLatch{
+    private static final class Sync extends AbstractQueuedSynchronizer {
+
+        Sync(int count) {setState(count);}
+
+        int getCount() {return getState();}
+
+        protected int tryAcquireShared(int acquires) {
+            return (getState() == 0) ? 1 : -1;
+        }
+
+        protected boolean tryReleaseShared(int releases) {
+            // Decrement count; signal when transition to zero
+            for (;;) {
+                int c = getState();
+                if (c == 0)
+                    return false;
+                int nextc = c-1;
+                if (compareAndSetState(c, nextc))
+                    return nextc == 0;
+            }
+        }
+    }
+
+    public void await() throws InterruptedException {
+        sync.acquireSharedInterruptibly(1);
+    }
+    public boolean await(long timeout, TimeUnit unit)
+        throws InterruptedException {
+        return sync.tryAcquireSharedNanos(1, unit.toNanos(timeout));
+    }
+    public void countDown() {
+        sync.releaseShared(1);
+    }
+}
+```
+
 ### Exectors
 
 用于管理线程的创建与生命周期管理
