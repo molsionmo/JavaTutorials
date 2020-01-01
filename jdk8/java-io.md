@@ -114,9 +114,8 @@ public class SocketExample {
 
 非阻塞型IO,相较于阻塞型IO，主要区分在网络IO中
 
-* 对应Linux的non-blocking-io,很神奇,Linux下的I/O 多路复用刚好也是NIO中的selector多路复用方案,而Linux下的IO多路复用又支撑起了Java的AIO
 * 阻塞型IO，BufferReader(new InputSteamReader(socket.getInputStream)).readLine(), 这个会阻塞当前线程以读到数据
-* NIO,非阻塞型IO，可以配置套接字为非阻塞,有数据时调用，无数据时返回.不阻塞主线程.
+* NIO,非阻塞型IO，可以配置套接字为非阻塞,有数据时调用，无数据时返回.不阻塞主线程.select时阻塞主线程,获得channel后里面的数据是可以读取的了
 
 问题:
 
@@ -254,3 +253,14 @@ windows这方面其实更强大些,application请求异步IO时,OS将数据读�
 NIO | 多路复用,主线程轮询IO事件 | 多连接,轻操作 |application(selector -------- channel -------- 业务)
 AIO | 异步通信，协同OS;请求OS后等待IO完成回调再执行,充分使用了OS中的IO | 多连接,重操作 | application -------- OS(read)return -------- 回调application -------- 业务
 BIO | 一个连接一个线程 | 少连接且稳定场景 | application -------- socket.read -------- 业务 (thread)
+
+## Linux IO
+
+[github-linux-io](https://github.com/CyC2018/CS-Notes/blob/master/notes/Socket.md)
+
+个人感觉JavaIO中的模型与LinuxIO模型有一一对应的,那么直接调用就好
+
+一个操作需要进行2个阶段
+
+* 等待数据准备好
+* 从内核向进程复制数据

@@ -121,7 +121,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
 * FairSync(谁等得久谁就拿走锁,FIFO)
 * NonfairSync(随便谁都可以拿,没界定)
-* 可重入的实现其实是state增加,每次lock+1,需要多次unlock
+* 可重入的实现其实是state增加,每次lock+1,需要多次unlock,获取到信号量的线程state=1并进行叠加,当state=0时才能继续acquire
 * Sync核心是实现tryAcquire(int),tryRelease(int)
 * Sync暴露的API是lock(int),parent.acquireInterruptibly(int),parent.release(int),parent.tryAcquireNanos(timeout,unit),还有AQS中的队列情况与当前线程等.
 * compareAndSetState方法来自AQS,它使用的是Unsafe.compareAndSwapInt()硬件级的原子操作,只有部分类才能使用
@@ -250,6 +250,7 @@ static final class NonfairSync extends Sync {
 /**
 * 初始化CountDownLatch count=10;
 * 10个工作线程countDown(),将 state置为0, 主线程的await(),acquireSharedInterruptibly(1)才能解除阻塞
+* ReentrantLock初始化state=0,CountDownLatch初始化state=10(state--达到0时才能acquire到)
 */
 public class CountDownLatch{
     private static final class Sync extends AbstractQueuedSynchronizer {
